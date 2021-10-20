@@ -28,16 +28,23 @@ class FTC200 :
         # status data:
         self.SerialNumber = None
         self.FirmwareVersion = None
+        # not sure why sometimes they use HV and sometimes voltage
         self.MinimumHV = None # this is in kV
-        self.MaximumVoltage = None
-        self.MinimumEmissionCurrent = None
+        self.MaximumVoltage = None # I think this is also kV
+        self.VoltageSetpointWhole = None
+        self.VoltageSetpointDecimal = None # only one sig fig 0-9
+        self.VoltageSetpoint = None # float
+        self.MinimumEmissionCurrent = None # currents are all microamps
         self.MaximumEmissionCurrent = None
         self.ControlVoltageValue = None
-        self.EmissionCurrentSetpoint = None
+        self.EmissionCurrentSetpointWhole = None
         self.EmissionCurrentSetpointDecimal = None
+        self.EmissionCurrentSetpoint = None
         self.MonitoredVoltage = None
+        self.MonitoredVoltageWhole = None
         self.MonitoredVoltageDecimal = None
         self.MonitoredEmissionCurrent = None
+        self.MonitoredEmissionCurrentWhole = None
         self.MonitoredEmissionCurrentDecimal = None
         self.InterlockStatus = None
         self.HighVoltageState = None
@@ -182,7 +189,25 @@ class FTC200 :
 
     # did not implement SetVoltageScaleFactor
     # did not implement GetControlVoltageForVoltage
-    # did not implement SetVoltageSetpoint
+
+    # TODO
+    # change argument to float (units are kV)
+    # add check for argument range
+    def SetVoltageSetpoint (self, voltage_whole, voltage_decimal) :
+        commandbyte = 0x4D
+        nbytes_t = 3
+        nbytes_r = 4
+        data = bytearray ([voltage_whole, voltage_decimal])
+        stat = self.SendCommandAndGetReply \
+               (commandbyte, nbytes_t, data, nbytes_r)
+        if stat :
+            return stat
+        commandstat = self.data[3]
+        if commandstat :
+            print ("FTC200 status error")
+            return commandstat
+        self.UpdateVoltageSetpoint ()
+        return 0
     
     def GetVoltageSetpoint (self) :
         commandbyte = 0x4E
@@ -197,12 +222,16 @@ class FTC200 :
         if commandstat :
             print ("FTC200 status error")
             return commandstat
-        self.VoltageSetpointWholeNumber = self.data[4]
-        self.VoltageSetpointDecimal = self.data[5]
-        # I'm not sure how to correctly parse this into a float;
-        # documentation unclear
+        self.UpdateVoltageSetpoint ()
         return 0
 
+    def UpdateVoltageSetpoint (self) :
+        self.VoltageSetpointWhole = self.data[4]
+        self.VoltageSetpointDecimal = self.data[5]
+        self.VoltageSetpoint = self.VoltageSetpointWhole + \
+            self.VoltageSetpointDecimal / 10.0
+        return
+    
     # did not implement SetMinimumEmissionCurrent
 
     def GetMinimumEmissionCurrent (self) :
@@ -258,7 +287,9 @@ class FTC200 :
         # I'm not sure what it is
         return 0  
 
-    # not sure how to parse decimal part of emission current
+    # TODO
+    # use float argument
+    # check argument value
     def SetEmissionCurrentSetpoint (self, current_whole, current_decimal) :
         commandbyte = 0x55
         nbytes_t = 4
@@ -275,9 +306,7 @@ class FTC200 :
         if commandstat :
             print ("FTC200 status error")
             return commandstat
-        self.EmissionCurrentSetpoint = int.from_bytes (self.data[4:6], "big")
-        self.EmissionCurrentSetpointDecimal = self.data[6]
-        # not sure how to convert decimal
+        self.UpdateEmissionCurrentSetpoint ()
         return 0
     
     def GetEmissionCurrentSetpoint (self) :
@@ -293,11 +322,17 @@ class FTC200 :
         if commandstat :
             print ("FTC200 status error")
             return commandstat
-        self.EmissionCurrentSetpoint = int.from_bytes (self.data[4:6], "big")
-        self.EmissionCurrentSetpointDecimal = self.data[6]
-        # not sure how to convert decimal
+        self.UpdateEmissionCurrentSetpoint ()
         return 0
 
+    def UpdateEmissionCurrentSetpoint (self) :
+        self.EmissionCurrentSetpointWhole = \
+            int.from_bytes (self.data[4:6], "big")
+        self.EmissionCurrentSetpointDecimal = self.data[6]
+        self.EmissionCurrentSetpoint = self.EmissionCurrentSetpointWhole + \
+            self.EmissionCurrentSetpointDecimal / 10.0
+        return
+        
     def GetMonitoredVoltage (self) :
         commandbyte = 0x57
         nbytes_t = 1
@@ -311,8 +346,10 @@ class FTC200 :
         if commandstat :
             print ("FTC200 status error")
             return commandstat
-        self.MonitoredVoltage = self.data[4]
+        self.MonitoredVoltageWhole = self.data[4]
         self.MonitoredVoltageDecimal = self.data[5]
+        self.MonitoredVoltage = self.MonitoredVoltageWhole + \
+            self.MonitoredVoltageDecimal / 10.0
         return 0
     
     def GetMonitoredEmissionCurrent (self) :
@@ -328,8 +365,11 @@ class FTC200 :
         if commandstat :
             print ("FTC200 status error")
             return commandstat
-        self.MonitoredEmissionCurrent = int.from_bytes (self.data[4:6], "big")
+        self.MonitoredEmissionCurrentWhole = \
+            int.from_bytes (self.data[4:6], "big")
         self.MonitoredEmissionCurrentDecimal = self.data[6]
+        self.MonitoredEmissionCurrent = self.MonitoredEmissionCurrentWhole + \
+            self.MonitoredEmissionCurrentDecimal / 10.0
         return 0
 
     def GetInterlockStatus (self) :
@@ -428,17 +468,12 @@ class FTC200 :
         print ("MaximumEmissionCurrent:\t{}".format \
                (self.MaximumEmissionCurrent))
         print ("Control voltage value:\t{}".format (self.ControlVoltageValue))
-        print ("Emission current setpoint:\t{}".format \
+        print ("Voltage setpoint:\t{:.1f} kV".format (self.VoltageSetpoint))
+        print ("Emission current setpoint:\t{:.1f} uA".format \
                (self.EmissionCurrentSetpoint))
-        print ("Emission current setpoint decimal:\t{}".format \
-               (self.EmissionCurrentSetpointDecimal))
-        print ("Monitored voltage:\t{}".format (self.MonitoredVoltage))
-        print ("Monitored voltage decimal:\t{}".format \
-               (self.MonitoredVoltageDecimal))
-        print ("Monitored emission current:\t{}".format \
+        print ("Monitored voltage:\t{:.1f} kV".format (self.MonitoredVoltage))
+        print ("Monitored emission current:\t{:.1f} uA".format \
                (self.MonitoredEmissionCurrent))
-        print ("Monitored emission current decimal:\t{}".format \
-               (self.MonitoredEmissionCurrentDecimal))
         istat = "closed" if self.InterlockStatus else "open"
         print ("Interlock status:\t{}".format (istat))
         hvstat = "on" if self.HighVoltageState else "off"
