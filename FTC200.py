@@ -16,6 +16,13 @@ def PrepareCommand (command) :
     full_command.append (checksum)
     return full_command
 
+# this is meant to be used only with numbers having a single decimal place
+def SplitToWholeDecimal (number) :
+    temp = number * 10
+    whole = int (temp // 10)
+    decimal = int (temp % 10)
+    return whole, decimal
+
 class FTC200 :
 
     def __init__ (self, device_path) :
@@ -193,7 +200,14 @@ class FTC200 :
     # TODO
     # change argument to float (units are kV)
     # add check for argument range
-    def SetVoltageSetpoint (self, voltage_whole, voltage_decimal) :
+    def SetVoltageSetpoint (self, voltage) :
+        if voltage > self.MaximumVoltage :
+            print ("Requested voltage exceeds maximum allowed.")
+            return 1
+        if voltage < self.MinimumHV :
+            print ("Requested voltage is lower than minimum allowed.")
+            return 1
+        voltage_whole, voltage_decimal = SplitToWholeDecimal (voltage)
         commandbyte = 0x4D
         nbytes_t = 3
         nbytes_r = 4
@@ -290,10 +304,17 @@ class FTC200 :
     # TODO
     # use float argument
     # check argument value
-    def SetEmissionCurrentSetpoint (self, current_whole, current_decimal) :
+    def SetEmissionCurrentSetpoint (self, current) :
+        if current > self.MaximumEmissionCurrent :
+            print ("Requested current exceeds maximum allowed.")
+            return 1
+        if current < self.MinimumEmissionCurrent :
+            print ("Requested current is lower than minimum allowed.")
+            return 1
         commandbyte = 0x55
         nbytes_t = 4
         nbytes_r = 5
+        current_whole, current_decimal = SplitToWholeDecimal (current)
         data = [current_whole//256]
         data.append (current_whole%256)
         data.append (current_decimal)
@@ -443,7 +464,6 @@ class FTC200 :
         self.GetVoltageSetpoint ()
         self.GetMinimumEmissionCurrent ()
         self.GetMaximumEmissionCurrent ()
-        #
         self.GetControlVoltageForEmissionCurrent ()
         self.GetEmissionCurrentSetpoint ()
         self.GetMonitoredVoltage ()
